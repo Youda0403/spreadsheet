@@ -3,168 +3,1029 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SyncRoom</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
-<link rel="stylesheet" href="style.css">
+<title>시트캡쳐 — 스프레드시트를 고화질 이미지로</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root{
+    --ink:#1f2a44;
+    --grid:#dfe6ee;
+    --paper:#fafbfc;
+    --select:#0e7a5f;      /* 시트 선택 테두리 초록 */
+    --select-soft:#e6f4ef;
+    --sub:#8a94a6;
+    --danger:#c04b3c;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:'IBM Plex Sans KR', sans-serif;
+    color:var(--ink);
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+      var(--paper);
+    background-size:28px 28px, 28px 28px, auto;
+    min-height:100vh;
+    padding:32px 16px 80px;
+  }
+  .wrap{max-width:960px; margin:0 auto;}
+  header{margin-bottom:28px;}
+  .cellref{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px; color:var(--select);
+    background:#fff; border:1px solid var(--grid);
+    display:inline-block; padding:2px 10px; border-radius:4px;
+    margin-bottom:10px;
+  }
+  h1{font-size:26px; font-weight:700; letter-spacing:-0.5px;}
+  h1 em{font-style:normal; color:var(--select);}
+  .desc{color:var(--sub); font-size:14px; margin-top:6px; line-height:1.6;}
+
+  /* 붙여넣기 존 = 거대한 선택된 셀 */
+  #pasteZone{
+    margin-top:20px;
+    background:#fff;
+    border:3px solid var(--select);
+    border-radius:6px;
+    min-height:120px;
+    padding:28px;
+    text-align:center;
+    cursor:text;
+    position:relative;
+    box-shadow:0 2px 10px rgba(14,122,95,0.08);
+    outline:none;
+    transition:background .15s;
+  }
+  #pasteZone:focus{background:var(--select-soft);}
+  #pasteZone{caret-color:transparent; -webkit-user-select:text; user-select:text;}
+  #mobilePasteRow{margin-top:12px; text-align:center;}
+  #mobilePasteRow .row-note{font-size:12px; color:var(--sub); margin-top:8px; line-height:1.6;}
+  #mobilePasteRow .row-note b{color:var(--select);}
+  #mobilePasteRow button{margin:0 4px 4px;}
+  #sheet img.pdf-preview{display:block; max-width:100%; height:auto;}
+  #pasteZone::after{
+    content:'';
+    position:absolute; right:-7px; bottom:-7px;
+    width:10px; height:10px; background:var(--select);
+    border:2px solid #fff; border-radius:2px;
+  }
+  #pasteZone .big{font-size:17px; font-weight:500;}
+  #pasteZone .small{font-size:13px; color:var(--sub); margin-top:6px;}
+  kbd{
+    font-family:'IBM Plex Mono', monospace; font-size:12px;
+    background:var(--paper); border:1px solid var(--grid);
+    border-bottom-width:2px; border-radius:4px; padding:1px 6px;
+  }
+
+  /* 옵션 바 */
+  #optionBar{
+    display:none; flex-wrap:wrap; gap:14px; align-items:center;
+    background:#fff; border:1px solid var(--grid); border-radius:6px;
+    padding:12px 16px; margin-top:20px; font-size:13px;
+  }
+  #optionBar label{display:flex; align-items:center; gap:6px; color:var(--ink);}
+  select, input[type="number"]{
+    font-family:inherit; font-size:13px;
+    border:1px solid var(--grid); border-radius:4px;
+    padding:4px 6px; background:#fff; color:var(--ink);
+  }
+  input[type="number"]{width:64px;}
+  .spacer{flex:1;}
+  button{
+    font-family:inherit; font-size:14px; font-weight:500;
+    border:none; border-radius:5px; padding:9px 18px; cursor:pointer;
+    transition:transform .08s, opacity .15s;
+  }
+  button:active{transform:translateY(1px);}
+  .btn-primary{background:var(--select); color:#fff;}
+  .btn-ghost{background:#fff; color:var(--ink); border:1px solid var(--grid);}
+  .btn-ghost:hover{background:var(--paper);}
+  button:disabled{opacity:.45; cursor:default;}
+
+  /* 미리보기 */
+  #previewSection{display:none; margin-top:20px;}
+  .preview-label{
+    font-family:'IBM Plex Mono', monospace; font-size:12px;
+    color:var(--sub); margin-bottom:8px;
+  }
+  #captureFrame{
+    display:inline-block;
+    max-width:100%;
+    overflow:auto;
+    border:1px dashed var(--grid);
+    background:
+      linear-gradient(45deg,#eee 25%,transparent 25%,transparent 75%,#eee 75%),
+      linear-gradient(45deg,#eee 25%,transparent 25%,transparent 75%,#eee 75%);
+    background-size:16px 16px;
+    background-position:0 0, 8px 8px;
+  }
+  #capture{
+    display:inline-block;
+    background:#fff;
+  }
+  #sheet table{border-collapse:collapse;}
+  #sheet td, #sheet th{position:relative;}
+  #sheet td:hover, #sheet th:hover{outline:2px solid var(--select); outline-offset:-2px; cursor:pointer;}
+  #sheet img.inserted{display:block; margin:0 auto;}
+  #capture{position:relative;}
+  #cropBox{
+    position:absolute; z-index:2; pointer-events:none; box-sizing:border-box;
+    border:2px dashed #c2185b; background:rgba(194,24,91,.12);
+  }
+  #pdfChips{flex-basis:100%; display:flex; gap:8px; flex-wrap:wrap;}
+  .chip{
+    width:36px; height:32px; padding:0; position:relative;
+    border:1px solid var(--grid); background:#fff; color:var(--ink);
+    border-radius:5px; font-size:13px; font-weight:500;
+  }
+  .chip.on{background:var(--select); color:#fff; border-color:var(--select);}
+  .chip.on::after{
+    content:attr(data-order);
+    position:absolute; top:-7px; right:-7px;
+    background:#c2185b; color:#fff; font-size:10px;
+    min-width:15px; height:15px; line-height:15px; border-radius:8px;
+  }
+  .chip.on[data-order=""]::after{display:none;}
+  .hint{font-size:12px; color:var(--sub); margin-top:10px; line-height:1.7;}
+  .hint b{color:var(--select);}
+
+  #toast{
+    position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(80px);
+    background:var(--ink); color:#fff; font-size:13px;
+    padding:10px 20px; border-radius:6px; opacity:0;
+    transition:all .25s; pointer-events:none; white-space:nowrap;
+  }
+  #toast.show{transform:translateX(-50%) translateY(0); opacity:1;}
+  #seamPanel{display:none;background:white;border:1px solid var(--grid);padding:16px;margin-top:16px;border-radius:6px;}
+  .seam-row{border-top:1px solid var(--grid);margin-top:14px;padding-top:12px;}
+  .seam-controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0;}
+  .seam-controls input[type=range]{flex:1;min-width:140px;}
+  .seam-preview{display:block;width:100%;max-height:220px;object-fit:contain;border:1px solid var(--grid);}
+  .seam-status{font-size:12px;color:var(--sub);}
+  @media(max-width:600px){body{padding:18px 10px 50px;}#optionBar{gap:10px;padding:12px;}#pasteZone{padding:22px 12px;}#toast{white-space:normal;width:max-content;max-width:92vw;}}
+</style>
 </head>
 <body>
-<div class="page">
+<div class="wrap">
+  <header>
+    <div class="cellref">A1</div>
+    <h1>시트캡쳐 <em>—</em> 붙여넣으면 이미지가 됩니다</h1>
+    <div class="desc">엑셀·구글 시트에서 셀 범위를 복사한 뒤, 아래 칸을 클릭하고 붙여넣기 하세요. 서식(배경색·테두리·글꼴)이 그대로 유지된 채 고해상도 PNG로 저장됩니다.</div>
+  </header>
 
-<header>
-  <div class="logo">Sync<span>Room</span></div>
-  <div id="roomBadge" style="display:none" class="room-pill">
-    <span class="live-dot"></span>
-    <span id="roomCodeDisplay"></span>
+  <div id="pasteZone" tabindex="0" contenteditable="true" inputmode="none" spellcheck="false">
+    <div class="big">여기를 클릭하고 <kbd>Ctrl</kbd>+<kbd>V</kbd></div>
+    <div class="small">복사한 셀 범위가 이 자리에 표로 나타납니다<br>모바일: 이 칸을 길게 눌러 ‘붙여넣기’를 선택하거나, 아래 버튼을 누르세요</div>
   </div>
-</header>
-
-<!-- LANDING -->
-<div id="landing">
-  <div class="cards">
-    <div class="card">
-      <span class="card-label">방장</span>
-      <h2>방 만들기</h2>
-      <p style="font-size:13px;color:var(--ink2);line-height:1.6">6자리 코드를 친구에게 공유하세요</p>
-      <button class="btn btn-primary" onclick="createRoom()">방 만들기 →</button>
-    </div>
-    <div class="card">
-      <span class="card-label">게스트</span>
-      <h2>방 입장</h2>
-      <input type="text" class="code-input" id="joinInput" placeholder="ABC123" maxlength="6">
-      <button class="btn btn-outline" onclick="joinRoom()">입장하기 →</button>
-    </div>
-  </div>
-  <div id="connStatus"></div>
-</div>
-
-<!-- ROOM -->
-<div id="room">
-  <div id="ytMount" class="yt-hidden"></div>
-
-  <!-- PLAYER -->
-  <div class="player-card">
-    <div class="player-display">
-      <div class="album-art">
-        <span class="def-icon" id="defIcon">♪</span>
-        <img id="albumImg" style="display:none" alt="">
-      </div>
-      <div class="track-meta">
-        <div class="t-title" id="trackTitle"><span class="t-idle">재생할 곡을 선택하세요</span></div>
-        <div class="t-sub" id="trackSub" style="display:none">YouTube</div>
-      </div>
-      <div class="peer-chip" id="peerChip">연결 중...</div>
-    </div>
-
-    <div class="player-error" id="playerError">
-      ⚠️ 이 영상은 외부 재생이 차단되어 있어요. 다른 링크를 시도해보세요.
-    </div>
-
-    <div class="controls">
-      <div class="prog-row">
-        <span class="time-lbl" id="timeCur">0:00</span>
-        <input type="range" id="progressBar" min="0" max="100" value="0" step="0.1">
-        <span class="time-lbl r" id="timeDur">0:00</span>
-      </div>
-      <div class="ctrl-row">
-        <div class="play-btns">
-          <!-- 이전 곡 -->
-          <button class="btn btn-ghost btn-sm" id="btnPrev" onclick="hostCmd('prev')" title="이전 곡">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
-          </button>
-          <!-- 재생/정지 (방장+게스트 공통) -->
-          <button class="btn-play" id="btnPlay" onclick="handlePlay()" disabled>
-            <svg id="iconPlay" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-            <svg id="iconPause" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-          </button>
-          <!-- 동기화 버튼 (게스트 전용, 처음 입장 시) -->
-          <button class="btn-sync" id="btnSync" onclick="guestSync()">동기화</button>
-          <!-- 다음 곡 -->
-          <button class="btn btn-ghost btn-sm" id="btnNext" onclick="hostCmd('next')" title="다음 곡">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="transform:scaleX(-1)"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
-          </button>
-          <!-- 반복 (방장 전용) -->
-          <button class="btn btn-ghost btn-sm" id="btnRepeat" onclick="toggleRepeat()" title="반복 없음" style="opacity:.4;display:none">
-            <svg id="iconRepeatNone" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
-            <svg id="iconRepeatOne"  width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z"/></svg>
-            <svg id="iconRepeatAll"  width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
-          </button>
-        </div>
-        <div class="vol-row">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
-          <input type="range" id="volBar" min="0" max="100" value="80">
-          <span class="vol-lbl" id="volLabel">80%</span>
-        </div>
-      </div>
-    </div>
+  <div id="mobilePasteRow">
+    <button class="btn-primary" id="clipboardBtn">📋 클립보드에서 가져오기</button>
+    <button class="btn-ghost" id="pdfBtn">📄 PDF로 가져오기</button>
+    <div class="row-note">폰트·이미지·셀 크기까지 완벽히 유지하려면 시트 앱에서 <b>⋮ → 공유 및 내보내기 → PDF</b>로 저장한 파일을 올리세요</div>
   </div>
 
-  <!-- BOTTOM -->
-  <div class="bottom-grid">
-    <div class="panel">
-      <div class="panel-head">
-        <span class="panel-title">플레이리스트</span>
-        <span id="trackCount" style="font-size:12px;color:var(--ink2)">0곡</span>
-      </div>
-      <div class="playlist-list" id="playlistEl"></div>
+  <div id="optionBar">
+    <label>해상도
+      <select id="scaleSel">
+        <option value="2">2배</option>
+        <option value="3" selected>3배</option>
+        <option value="4">4배</option>
+        <option value="6">6배</option>
+      </select>
+    </label>
+    <label>배경
+      <select id="bgSel">
+        <option value="white" selected>흰색</option>
+        <option value="transparent">투명</option>
+      </select>
+    </label>
+    <label>여백(px)
+      <input type="number" id="padInput" value="16" min="0" max="200">
+    </label>
+    <label>셀 이미지 높이(px)
+      <input type="number" id="imgHeight" value="60" min="20" max="400">
+    </label>
+    <label id="pdfPageWrap" style="display:none">PDF
+      <select id="pdfDirSel">
+        <option value="h">가로로 잇기</option>
+        <option value="v">세로로 잇기</option>
+        <option value="single">한 페이지만</option>
+      </select>
+    </label>
+    <div id="pdfChips" style="display:none"></div>
+    <div class="spacer"></div>
+    <button class="btn-ghost" id="cropBtn">✂️ 영역 선택</button>
+    <button class="btn-ghost" id="copyBtn">이미지 복사</button>
+    <button class="btn-primary" id="saveBtn">PNG 저장</button>
+  </div>
+
+  <section id="seamPanel" aria-label="PDF 페이지 경계 조절">
+    <strong>페이지 경계 정리</strong>
+    <p class="hint">앞 페이지 끝과 다음 페이지 시작을 비교해요. 점선만 반복되는 등 확신이 없으면 자동으로 자르지 않아요. 아래 확대 보기에서 다음 페이지의 시작 부분을 조금씩 제거해 맞춰 주세요. 분홍 선은 연결 위치이며 저장되지 않아요.</p>
+    <div class="seam-controls">
+      <label><input id="seamAuto" type="checkbox" checked> 확실한 중복만 자동 정리</label>
+      <button class="btn-ghost" id="seamReset">경계 조절 초기화</button>
     </div>
-
-    <div class="side-col">
-      <!-- 곡 추가 -->
-      <div class="panel">
-        <div class="panel-head"><span class="panel-title">곡 추가</span></div>
-        <div class="add-form" id="addForm">
-          <input type="url" id="ytUrl" placeholder="https://youtube.com/watch?v=...">
-          <input type="text" id="ytTitle" placeholder="곡 제목 (선택)">
-          <button class="btn btn-accent btn-sm" onclick="addTrack()">＋ 추가</button>
-        </div>
-        <div class="guest-lock" id="guestLock">🔒 곡 추가/삭제는 방장만 가능해요</div>
+    <div id="seamRows"></div>
+  </section>
+  <div id="previewSection">
+    <div class="preview-label">PREVIEW — 점선 안쪽이 저장 범위</div>
+    <div id="captureFrame">
+      <div id="capture">
+        <div id="sheet"></div>
       </div>
-
-      <!-- 참여자 -->
-      <div class="panel">
-        <div class="panel-head">
-          <span class="panel-title">참여자</span>
-          <span id="memberCount" style="font-size:12px;color:var(--ink2)">0명</span>
-        </div>
-        <div class="member-list" id="memberList"></div>
-      </div>
-
-      <!-- 방 설정 -->
-      <div class="panel">
-        <div class="panel-head">
-          <span class="panel-title">방 설정</span>
-          <span id="roleChip" class="peer-chip"></span>
-        </div>
-        <div class="room-actions">
-          <div class="action-row">
-            <button class="btn btn-outline btn-sm" onclick="exportList()">📤 내보내기</button>
-            <button class="btn btn-outline btn-sm" onclick="document.getElementById('importEl').click()">📥 불러오기</button>
-            <input type="file" id="importEl" accept=".json" style="display:none" onchange="importList(event)">
-          </div>
-          <button class="btn btn-ghost btn-sm" onclick="copyCode()">🔗 코드 복사</button>
-          <button class="btn btn-ghost btn-sm" id="miniBtn" onclick="openMiniPlayer()">🎵 미니 플레이어</button>
-          <button class="btn btn-ghost btn-sm" id="leaveBtn" onclick="confirmLeave()" style="color:var(--accent)">나가기</button>
-        </div>
-      </div>
+    </div>
+    <div class="hint">
+      <b>셀에 이미지 넣기:</b> 미리보기에서 셀을 클릭하면 이미지 파일을 골라 그 셀에 넣을 수 있어요. (복사할 때 이미지가 딸려오지 않는 문제를 이걸로 해결)<br>
+      넣은 이미지를 클릭하면 삭제됩니다. 다시 붙여넣으면 표 전체가 새로 교체돼요.
     </div>
   </div>
 </div>
 
-<!-- MODAL -->
-<div class="overlay" id="modal">
-  <div class="modal">
-    <h3 id="modalTitle"></h3>
-    <p id="modalMsg"></p>
-    <div class="modal-btns">
-      <button class="btn btn-outline" onclick="closeModal()">취소</button>
-      <button class="btn btn-primary" id="modalOk">확인</button>
-    </div>
-  </div>
-</div>
+<input type="file" id="imgPicker" accept="image/*" style="display:none">
+<input type="file" id="pdfPicker" accept="application/pdf" style="display:none">
 <div id="toast"></div>
 
-<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-<script src="https://www.youtube.com/iframe_api"></script>
-<script src="app.js"></script>
+<script>
+(function(){
+  const pasteZone = document.getElementById('pasteZone');
+  const optionBar = document.getElementById('optionBar');
+  const previewSection = document.getElementById('previewSection');
+  const sheet = document.getElementById('sheet');
+  const capture = document.getElementById('capture');
+  const imgPicker = document.getElementById('imgPicker');
+  const toast = document.getElementById('toast');
+  let targetCell = null;
+
+  function showToast(msg){
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(()=>toast.classList.remove('show'), 2200);
+  }
+
+  function applyPadding(){
+    capture.style.padding = (parseInt(document.getElementById('padInput').value,10) || 0) + 'px';
+  }
+  document.getElementById('padInput').addEventListener('input', applyPadding);
+
+  document.getElementById('bgSel').addEventListener('change', function(){
+    capture.style.background = this.value === 'transparent' ? 'transparent' : '#fff';
+  });
+
+  document.getElementById('imgHeight').addEventListener('input', function(){
+    const h = parseInt(this.value,10) || 60;
+    sheet.querySelectorAll('img.inserted').forEach(img => img.style.height = h + 'px');
+  });
+
+  // ---------- 붙여넣기 처리 ----------
+  const placeholderHTML = pasteZone.innerHTML;
+
+  window.addEventListener('paste', function(e){
+    const t = e.target;
+    if (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA') return;
+    const cd = e.clipboardData;
+    const html = cd ? cd.getData('text/html') : '';
+    const text = cd ? cd.getData('text/plain') : '';
+    if (!html && !text) {
+      // 일부 모바일 브라우저는 paste 이벤트에 클립보드 데이터를 안 실어줌
+      // → 막지 않고 브라우저가 pasteZone에 직접 삽입하게 둔 뒤 DOM에서 수확
+      if (t === pasteZone || pasteZone.contains(t)) {
+        scheduleHarvest();
+      }
+      return;
+    }
+    e.preventDefault();
+    if (html && /<table/i.test(html)) {
+      renderFromHtml(html);
+    } else if (text && text.indexOf('\t') !== -1) {
+      renderFromTsv(text);
+    } else if (html) {
+      renderFromHtml(html);
+    } else {
+      showToast('표 형태의 데이터가 아니에요. 셀 범위를 복사해서 붙여넣어 주세요.');
+      return;
+    }
+    afterRender();
+  });
+
+  let harvestTimer = null;
+  function scheduleHarvest(){
+    clearTimeout(harvestTimer);
+    harvestTimer = setTimeout(harvestPasteZone, 60);
+  }
+
+  // paste 이벤트 없이 내용이 삽입되는 브라우저 대비 안전망
+  pasteZone.addEventListener('input', scheduleHarvest);
+
+  function harvestPasteZone(){
+    const clone = pasteZone.cloneNode(true);
+    clone.querySelectorAll('.big, .small').forEach(n => n.remove());
+    const hasTable = clone.querySelector('table');
+    const text = (clone.innerText || '').trim();
+    pasteZone.innerHTML = placeholderHTML;
+    if (hasTable){
+      renderFromHtml(clone.innerHTML);
+    } else if (text){
+      renderFromTsv(text);
+    } else {
+      showToast('붙여넣은 내용을 읽지 못했어요. 시트에서 셀을 다시 복사해 주세요.');
+      return;
+    }
+    afterRender();
+  }
+
+  function renderFromHtml(html){
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    // 위험/불필요 요소 제거
+    doc.querySelectorAll('script, link, meta, iframe, object, embed').forEach(n => n.remove());
+    doc.querySelectorAll('*').forEach(n => {
+      [...n.attributes].forEach(a => {
+        if (/^on/i.test(a.name)) n.removeAttribute(a.name);
+      });
+    });
+    sheet.innerHTML = '';
+    // 엑셀이 주는 <style> 블록은 #sheet 범위로 스코핑해서 유지
+    doc.querySelectorAll('style').forEach(st => {
+      sheet.appendChild(scopeStyle(st.textContent));
+    });
+    const table = doc.querySelector('table');
+    if (table) {
+      sheet.appendChild(table);
+    } else {
+      const div = document.createElement('div');
+      div.innerHTML = doc.body.innerHTML;
+      sheet.appendChild(div);
+    }
+    injectFonts(sheet);
+  }
+
+  // 붙여넣은 서식에 쓰인 폰트를 구글 폰트에서 자동 로드 (없는 폰트면 조용히 무시됨)
+  const GENERIC_FONTS = ['arial','helvetica','sans-serif','serif','monospace','verdana','tahoma','calibri','times new roman','굴림','돋움','맑은 고딕','바탕','roboto'];
+  function injectFonts(root){
+    const fams = new Set();
+    root.querySelectorAll('[style]').forEach(el => {
+      const ff = el.style.fontFamily;
+      if (!ff) return;
+      const first = ff.split(',')[0].replace(/['"]/g,'').trim();
+      if (first && GENERIC_FONTS.indexOf(first.toLowerCase()) === -1) fams.add(first);
+    });
+    fams.forEach(f => {
+      const id = 'gf-' + f.replace(/\s+/g,'-');
+      if (document.getElementById(id)) return;
+      const link = document.createElement('link');
+      link.id = id;
+      link.rel = 'stylesheet';
+      link.href = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(f).replace(/%20/g,'+') + '&display=swap';
+      document.head.appendChild(link);
+    });
+  }
+
+  function scopeStyle(cssText){
+    const style = document.createElement('style');
+    try{
+      const tmp = document.createElement('style');
+      tmp.textContent = cssText;
+      document.head.appendChild(tmp);
+      let out = '';
+      for (const rule of tmp.sheet.cssRules){
+        if (rule.type === CSSRule.STYLE_RULE){
+          const scoped = rule.selectorText.split(',')
+            .map(s => '#sheet ' + s.trim()).join(', ');
+          out += scoped + '{' + rule.style.cssText + '}\n';
+        }
+      }
+      tmp.remove();
+      style.textContent = out;
+    }catch(err){
+      style.textContent = '';
+    }
+    return style;
+  }
+
+  function renderFromTsv(text){
+    const rows = text.replace(/\r/g,'').split('\n').filter(r => r.length > 0);
+    const table = document.createElement('table');
+    table.style.borderCollapse = 'collapse';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      r.split('\t').forEach(c => {
+        const td = document.createElement('td');
+        td.textContent = c;
+        td.style.cssText = 'border:1px solid #d0d7de; padding:4px 10px; font-size:13px;';
+        tr.appendChild(td);
+      });
+      table.appendChild(tr);
+    });
+    sheet.innerHTML = '';
+    sheet.appendChild(table);
+  }
+
+  function afterRender(){
+    pdfMode = false;
+    pdfRevision++;
+    clearTimeout(pdfPreviewTimer);
+    document.getElementById('seamPanel').style.display = 'none';
+    pdfPageWrap.style.display = 'none';
+    pdfChips.style.display = 'none';
+    clearCrop();
+    optionBar.style.display = 'flex';
+    previewSection.style.display = 'block';
+    applyPadding();
+    pasteZone.querySelector('.big').textContent = '다시 붙여넣으면 표가 교체됩니다';
+    pasteZone.querySelector('.small').textContent = '아래 미리보기를 확인하고 PNG 저장을 누르세요';
+    showToast('표를 불러왔어요');
+  }
+
+  // ---------- 셀 이미지 삽입 ----------
+  sheet.addEventListener('click', function(e){
+    if (cropMode) return;
+    const img = e.target.closest('img.inserted');
+    if (img && sheet.contains(img)){
+      if (confirm('이 이미지를 삭제할까요?')) img.remove();
+      return;
+    }
+    const cell = e.target.closest('td, th');
+    if (!cell || !sheet.contains(cell)) return;
+    targetCell = cell;
+    imgPicker.value = '';
+    imgPicker.click();
+  });
+
+  imgPicker.addEventListener('change', function(){
+    const file = this.files[0];
+    if (!file || !targetCell) return;
+    const reader = new FileReader();
+    reader.onload = function(ev){
+      const img = document.createElement('img');
+      img.src = ev.target.result;
+      img.className = 'inserted';
+      img.style.height = (parseInt(document.getElementById('imgHeight').value,10) || 60) + 'px';
+      targetCell.appendChild(img);
+      targetCell = null;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // ---------- PDF 가져오기 (원본 그대로) ----------
+  let pdfMode = false;
+  let pdfDoc = null;
+  let selectedPages = [];
+  const pdfCache = new Map();
+  const seamSettings = new Map();
+  let pdfRevision = 0;
+  const pdfPageWrap = document.getElementById('pdfPageWrap');
+  const pdfDirSel = document.getElementById('pdfDirSel');
+  const pdfChips = document.getElementById('pdfChips');
+
+  document.getElementById('pdfBtn').addEventListener('click', function(){
+    if (typeof pdfjsLib === 'undefined'){
+      showToast('PDF 라이브러리를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.');
+      return;
+    }
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    document.getElementById('pdfPicker').value = '';
+    document.getElementById('pdfPicker').click();
+  });
+
+  document.getElementById('pdfPicker').addEventListener('change', async function(){
+    const file = this.files[0];
+    if (!file) return;
+    try{
+      showToast('PDF를 여는 중...');
+      const buf = await file.arrayBuffer();
+      pdfDoc = await pdfjsLib.getDocument({data: buf}).promise;
+      pdfCache.clear();
+      seamSettings.clear();
+      // 페이지 칩 구성: 기본은 전체 선택 + 가로 잇기
+      selectedPages = [];
+      for (let p = 1; p <= pdfDoc.numPages; p++) selectedPages.push(p);
+      pdfDirSel.value = 'v';
+      buildPageChips();
+      await refreshPdfPreview();
+      afterRender();
+      pdfMode = true;  // afterRender가 false로 초기화하므로 반드시 그 뒤에 설정
+      document.getElementById('seamPanel').style.display = multiPageJoin() ? 'block' : 'none';
+      const multi = pdfDoc.numPages > 1;
+      pdfPageWrap.style.display = multi ? 'flex' : 'none';
+      pdfChips.style.display = multi ? 'flex' : 'none';
+      showToast(multi
+        ? pdfDoc.numPages + '페이지 PDF — 붙일 페이지를 번호로 골라보세요'
+        : 'PDF를 불러왔어요');
+    }catch(err){
+      showToast('PDF를 읽지 못했어요: ' + err.message);
+    }
+  });
+
+  function buildPageChips(){
+    pdfChips.innerHTML = '';
+    for (let p = 1; p <= pdfDoc.numPages; p++){
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      b.textContent = p;
+      b.dataset.page = p;
+      b.addEventListener('click', onChipClick);
+      pdfChips.appendChild(b);
+    }
+    refreshChips();
+  }
+
+  function onChipClick(){
+    const p = parseInt(this.dataset.page, 10);
+    if (pdfDirSel.value === 'single'){
+      selectedPages = [p];
+    } else {
+      const i = selectedPages.indexOf(p);
+      if (i >= 0) selectedPages.splice(i, 1);
+      else selectedPages.push(p);          // 탭한 순서 = 이어붙이는 순서
+      if (!selectedPages.length) selectedPages = [p];
+    }
+    refreshChips();
+    clearCrop();
+    schedulePdfPreview();
+  }
+
+  function refreshChips(){
+    const multiJoin = pdfDirSel.value !== 'single' && selectedPages.length > 1;
+    pdfChips.querySelectorAll('.chip').forEach(b => {
+      const p = parseInt(b.dataset.page, 10);
+      const i = selectedPages.indexOf(p);
+      b.classList.toggle('on', i >= 0);
+      b.dataset.order = (multiJoin && i >= 0) ? String(i + 1) : '';
+    });
+  }
+
+  pdfDirSel.addEventListener('change', function(){
+    if (!pdfDoc) return;
+    if (this.value === 'single' && selectedPages.length > 1) selectedPages = [selectedPages[0]];
+    refreshChips();
+    clearCrop();
+    schedulePdfPreview();
+  });
+
+  let pdfPreviewTimer = null;
+  function schedulePdfPreview(){
+    pdfRevision++;
+    clearTimeout(pdfPreviewTimer);
+    pdfPreviewTimer = setTimeout(async () => {
+      try{
+        showToast('다시 그리는 중...');
+        await refreshPdfPreview();
+      }catch(err){showToast('미리보기 오류: ' + err.message);}
+    }, 350);
+  }
+
+  async function refreshPdfPreview(){
+    const revision = ++pdfRevision;
+    const c = await buildPdfCanvas(1.5, true, revision);
+    if(revision !== pdfRevision) return;
+    sheet.innerHTML = '';
+    const img = document.createElement('img');
+    img.className = 'pdf-preview';
+    img.src = c.toDataURL('image/png');
+    sheet.appendChild(img);
+  }
+
+  // 선택된 페이지들을 트림 후 이어붙인 캔버스 생성 (사이 여백 0)
+  function multiPageJoin(){return selectedPages.length > 1 && pdfDirSel.value !== 'single';}
+  document.getElementById('seamAuto').addEventListener('change', () => {clearCrop();schedulePdfPreview();});
+  document.getElementById('seamReset').addEventListener('click', () => {seamSettings.clear();clearCrop();schedulePdfPreview();});
+
+  function checkCanvasSize(w,h){
+    if(w < 1 || h < 1 || w > 30000 || h > 30000 || w*h > 24000000)
+      throw new Error('이미지가 너무 커요. 해상도를 낮추거나 페이지를 나눠 선택해 주세요.');
+  }
+
+  // Always detect at one fixed resolution; export uses the same crop fractions.
+  async function referencePage(doc,n){
+    if(!pdfCache.has(n)) pdfCache.set(n,(async()=>{
+      const page = await doc.getPage(n);
+      const vp = page.getViewport({scale:1.5});
+      checkCanvasSize(Math.floor(vp.width),Math.floor(vp.height));
+      const c = document.createElement('canvas');
+      c.width=Math.floor(vp.width);c.height=Math.floor(vp.height);
+      await page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+      return trimCanvas(c);
+    })());
+    return pdfCache.get(n);
+  }
+
+  // Conservative matching: require textured shared content, reject line-only and ambiguous matches.
+  function detectOverlap(a,b,dir){
+    const vertical=dir==='v', cross=vertical?a.width:a.height;
+    if(Math.abs(cross-(vertical?b.width:b.height))>2) return 0;
+    const lengthA=vertical?a.height:a.width, lengthB=vertical?b.height:b.width;
+    const limit=Math.min(120,Math.floor(Math.min(lengthA,lengthB)*.2));
+    if(limit<8) return 0;
+    const samples=180;
+    function strip(c,end){
+      const s=document.createElement('canvas');s.width=samples;s.height=limit;
+      const ctx=s.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,samples,limit);
+      if(vertical) ctx.drawImage(c,0,end?c.height-limit:0,c.width,limit,0,0,samples,limit);
+      else {ctx.transform(0,1,1,0,0,0);ctx.drawImage(c,end?c.width-limit:0,0,limit,c.height,0,0,limit,samples);}
+      return ctx.getImageData(0,0,samples,limit).data;
+    }
+    const x=strip(a,true),y=strip(b,false),candidates=[];
+    for(let k=8;k<=limit;k++){
+      let union=0,diff=0,textured=0;
+      const patterns=new Set();
+      for(let r=0;r<k;r++){
+        let transitions=0,last=false,ink=0;
+        let pattern='';
+        for(let j=8;j<samples-8;j++){
+          const i=((limit-k+r)*samples+j)*4,q=(r*samples+j)*4;
+          const ai=Math.min(x[i],x[i+1],x[i+2])<210,bi=Math.min(y[q],y[q+1],y[q+2])<210;
+          if(ai||bi)union++;if(ai!==bi)diff++;
+          if(bi)ink++;if(bi!==last)transitions++;last=bi;
+          pattern+=bi?'1':'0';
+        }
+        if(transitions>=8 && ink>5 && ink<samples*.65){textured++;patterns.add(pattern);}
+      }
+      if(union>100 && textured>=6 && patterns.size>=2 && textured<k*.8 && diff/union<.035)
+        candidates.push({k,score:diff/union});
+    }
+    candidates.sort((a,b)=>a.score-b.score);
+    if(!candidates.length)return 0;
+    const best=candidates[0];
+    if(candidates.some(c=>Math.abs(c.k-best.k)>2 && c.score<best.score+.025))return 0;
+    return best.k;
+  }
+
+  function drawSeamPreview(canvas,a,b,cut,dir){
+    const vertical=dir==='v', band=65;
+    const cross=Math.max(vertical?a.width:a.height,vertical?b.width:b.height);
+    canvas.width=vertical?cross:band*2;canvas.height=vertical?band*2:cross;
+    const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+    if(vertical){
+      const h=Math.min(band,a.height),t=Math.min(band,b.height-cut);
+      ctx.drawImage(a,0,a.height-h,a.width,h,0,band-h,a.width,h);
+      ctx.drawImage(b,0,cut,b.width,t,0,band,b.width,t);
+    }else{
+      const w=Math.min(band,a.width),t=Math.min(band,b.width-cut);
+      ctx.drawImage(a,a.width-w,0,w,a.height,band-w,0,w,a.height);
+      ctx.drawImage(b,cut,0,t,b.height,band,0,t,b.height);
+    }
+    ctx.strokeStyle='#c2185b';ctx.setLineDash([5,5]);ctx.beginPath();
+    ctx.moveTo(vertical?0:band,vertical?band:0);ctx.lineTo(vertical?cross:band,vertical?band:cross);ctx.stroke();
+  }
+
+  function renderSeamControls(refs,pages,dir,cuts,automatic){
+    const panel=document.getElementById('seamPanel'),rows=document.getElementById('seamRows');
+    panel.style.display=pages.length>1 && dir!=='single'?'block':'none';rows.replaceChildren();
+    if(dir==='single')return;
+    for(let i=1;i<refs.length;i++){
+      const key=dir+':'+pages[i-1]+':'+pages[i], b=refs[i];
+      const length=dir==='v'?b.height:b.width;
+      const row=document.createElement('div');row.className='seam-row';
+      const title=document.createElement('strong');title.textContent=pages[i-1]+' → '+pages[i]+'페이지 경계';
+      const status=document.createElement('p');status.className='seam-status';
+      status.textContent=automatic[i]?'자동 중복 후보: '+automatic[i]+'px':'확실한 중복 없음 · 이중 점선은 아래에서 직접 조절해 주세요.';
+      const controls=document.createElement('div');controls.className='seam-controls';
+      const slider=document.createElement('input');slider.type='range';slider.min=0;slider.max=Math.min(300,length-1);slider.step=1;
+      slider.value=cuts[i];slider.setAttribute('aria-label',title.textContent+' 다음 페이지 시작 제거량');
+      const number=document.createElement('input');number.type='number';number.min=0;number.max=slider.max;number.step=1;number.value=cuts[i];
+      number.setAttribute('aria-label',title.textContent+' 제거량 숫자 입력');
+      const value=document.createElement('output');value.textContent=cuts[i]+'px 제거';
+      const reset=document.createElement('button');reset.className='btn-ghost';reset.textContent='원본 유지';
+      const preview=document.createElement('canvas');preview.className='seam-preview';preview.setAttribute('aria-label',title.textContent+' 확대 보기');
+      drawSeamPreview(preview,refs[i-1],b,cuts[i],dir);
+      function adjust(amount){
+        const cut=Math.max(0,Math.min(+slider.max,Math.round(Number(amount)||0)));
+        slider.value=number.value=cut;value.textContent=cut+'px 제거';
+        drawSeamPreview(preview,refs[i-1],b,cut,dir);seamSettings.set(key,cut/length);clearCrop();
+      }
+      slider.addEventListener('input',()=>adjust(slider.value));
+      number.addEventListener('input',()=>adjust(number.value));
+      slider.addEventListener('change',schedulePdfPreview);
+      number.addEventListener('change',schedulePdfPreview);
+      reset.addEventListener('click',()=>{seamSettings.set(key,0);clearCrop();schedulePdfPreview();});
+      controls.append(slider,number,value,reset);row.append(title,status,controls,preview);rows.append(row);
+    }
+  }
+
+  async function buildPdfCanvas(scale,preview=false,revision=null){
+    const doc=pdfDoc;
+    const dir = pdfDirSel.value;
+    const pages = dir==='single' ? [selectedPages[0]||1] : [...(selectedPages.length ? selectedPages : [1])];
+    const settings=new Map(seamSettings),auto=document.getElementById('seamAuto').checked;
+    const refs=[];
+    let referencePixels=0;
+    for(const p of pages){
+      const c=await referencePage(doc,p);referencePixels+=c.width*c.height;
+      if(referencePixels>24000000)throw new Error('선택한 PDF 페이지가 너무 많아요. 페이지를 나눠 선택해 주세요.');
+      refs.push(c);
+    }
+    const cuts=[0],automatic=[0];
+    for(let i=1;i<refs.length;i++){
+      const n=detectOverlap(refs[i-1],refs[i],dir);automatic.push(n);
+      const length=dir==='v'?refs[i].height:refs[i].width,key=dir+':'+pages[i-1]+':'+pages[i];
+      cuts.push(Math.max(0,Math.min(length-1,Math.round(settings.has(key)?settings.get(key)*length:(auto?n:0)))));
+    }
+    if(preview && revision===pdfRevision)renderSeamControls(refs,pages,dir,cuts,automatic);
+    async function renderOne(n){
+      if(scale===1.5)return refs[pages.indexOf(n)];
+      const page = await doc.getPage(n);
+      const viewport = page.getViewport({scale: scale});
+      checkCanvasSize(Math.floor(viewport.width),Math.floor(viewport.height));
+      const c = document.createElement('canvas');
+      c.width = Math.floor(viewport.width);
+      c.height = Math.floor(viewport.height);
+      await page.render({canvasContext: c.getContext('2d'), viewport: viewport}).promise;
+      return trimCanvas(c);
+    }
+    if (dir === 'single' || pages.length === 1) return renderOne(pages[0]);
+    const parts = [];
+    let totalPixels=0;
+    for (const p of pages){
+      const c=await renderOne(p);totalPixels+=c.width*c.height;
+      if(totalPixels>24000000)throw new Error('선택한 페이지와 해상도가 너무 커요. 해상도를 낮추거나 페이지 수를 줄여 주세요.');
+      parts.push(c);
+    }
+    const out = document.createElement('canvas');
+    const scaledCuts=parts.map((c,i)=>Math.min((dir==='v'?c.height:c.width)-1,Math.round(cuts[i]*(dir==='v'?c.height/refs[i].height:c.width/refs[i].width))));
+    // Preserve larger pages; never silently clip the cross axis.
+    if (dir === 'h'){
+      out.width  = parts.reduce((s,c,i)=>s+c.width-scaledCuts[i], 0);
+      out.height = Math.max.apply(null, parts.map(c=>c.height));
+    } else {
+      out.width  = Math.max.apply(null, parts.map(c=>c.width));
+      out.height = parts.reduce((s,c,i)=>s+c.height-scaledCuts[i], 0);
+    }
+    checkCanvasSize(out.width,out.height);
+    const ctx = out.getContext('2d');
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,out.width,out.height);
+    let off = 0;
+    parts.forEach((c,i) => {
+      const cut=scaledCuts[i];
+      if (dir === 'h'){ ctx.drawImage(c,cut,0,c.width-cut,c.height,off,0,c.width-cut,c.height); off += c.width-cut; }
+      else { ctx.drawImage(c,0,cut,c.width,c.height-cut,0,off,c.width,c.height-cut); off += c.height-cut; }
+    });
+    return out;
+  }
+
+  // 가장자리 배경색(보통 흰 여백) 기준으로 자동 트림
+  function trimCanvas(c){
+    const ctx = c.getContext('2d');
+    const w = c.width, h = c.height;
+    const d = ctx.getImageData(0, 0, w, h).data;
+    const bg = [d[0], d[1], d[2]];
+    const tol = 12;
+    const isBg = i => Math.abs(d[i]-bg[0])<=tol && Math.abs(d[i+1]-bg[1])<=tol && Math.abs(d[i+2]-bg[2])<=tol;
+    const rowHasContent = y => {
+      const base = y*w*4;
+      for (let x=0; x<w; x+=2){ if (!isBg(base + x*4)) return true; }
+      return false;
+    };
+    const colHasContent = x => {
+      for (let y=0; y<h; y+=2){ if (!isBg((y*w + x)*4)) return true; }
+      return false;
+    };
+    let top=0, bottom=h-1, left=0, right=w-1;
+    while (top < bottom && !rowHasContent(top)) top++;
+    while (bottom > top && !rowHasContent(bottom)) bottom--;
+    while (left < right && !colHasContent(left)) left++;
+    while (right > left && !colHasContent(right)) right--;
+    if (top >= bottom || left >= right) return c; // 전부 배경이면 원본 유지
+    const out = document.createElement('canvas');
+    out.width = right-left+1; out.height = bottom-top+1;
+    out.getContext('2d').drawImage(c, left, top, out.width, out.height, 0, 0, out.width, out.height);
+    return out;
+  }
+
+  // ---------- 영역 선택 (원하는 부분만 저장) ----------
+  let cropMode = false;
+  let cropRect = null;   // 콘텐츠 기준 비율 {x,y,w,h} (0~1)
+  let cropBox = null;
+  let dragStart = null;
+
+  // 크롭 좌표의 기준이 되는 콘텐츠 요소 (PDF면 미리보기 이미지, 아니면 표 영역)
+  function cropRefEl(){
+    const pdfImg = sheet.querySelector('img.pdf-preview');
+    return pdfImg || sheet;
+  }
+
+  document.getElementById('cropBtn').addEventListener('click', function(){
+    cropMode = !cropMode;
+    this.textContent = cropMode ? '✂️ 선택 끝내기' : '✂️ 영역 선택';
+    capture.style.touchAction = cropMode ? 'none' : '';
+    capture.style.cursor = cropMode ? 'crosshair' : '';
+    if (cropMode) showToast('저장할 영역을 드래그하세요. 빈 곳을 탭하면 선택 해제');
+  });
+
+  capture.addEventListener('pointerdown', function(e){
+    if (!cropMode) return;
+    e.preventDefault();
+    capture.setPointerCapture(e.pointerId);
+    dragStart = {x: e.clientX, y: e.clientY};
+  });
+  capture.addEventListener('pointermove', function(e){
+    if (!cropMode || !dragStart) return;
+    e.preventDefault();
+    updateCrop(dragStart, e.clientX, e.clientY, false);
+  });
+  capture.addEventListener('pointerup', function(e){
+    if (!cropMode || !dragStart) return;
+    updateCrop(dragStart, e.clientX, e.clientY, true);
+    dragStart = null;
+  });
+
+  function updateCrop(s, cx, cy, final){
+    const r = cropRefEl().getBoundingClientRect();
+    const x1 = Math.max(r.left,  Math.min(s.x, cx));
+    const y1 = Math.max(r.top,   Math.min(s.y, cy));
+    const x2 = Math.min(r.right, Math.max(s.x, cx));
+    const y2 = Math.min(r.bottom,Math.max(s.y, cy));
+    if (x2 - x1 < 5 || y2 - y1 < 5){
+      if (final) clearCrop();   // 드래그 없이 탭 = 선택 해제
+      return;
+    }
+    cropRect = {
+      x: (x1 - r.left) / r.width,
+      y: (y1 - r.top)  / r.height,
+      w: (x2 - x1) / r.width,
+      h: (y2 - y1) / r.height
+    };
+    drawCropBox();
+  }
+
+  function drawCropBox(){
+    if (!cropBox){
+      cropBox = document.createElement('div');
+      cropBox.id = 'cropBox';
+      capture.appendChild(cropBox);
+    }
+    const r  = cropRefEl().getBoundingClientRect();
+    const cr = capture.getBoundingClientRect();
+    cropBox.style.left   = (r.left - cr.left + cropRect.x * r.width)  + 'px';
+    cropBox.style.top    = (r.top  - cr.top  + cropRect.y * r.height) + 'px';
+    cropBox.style.width  = (cropRect.w * r.width)  + 'px';
+    cropBox.style.height = (cropRect.h * r.height) + 'px';
+  }
+
+  function clearCrop(){
+    cropRect = null;
+    if (cropBox){ cropBox.remove(); cropBox = null; }
+  }
+
+  // 비율 크롭을 캔버스에 적용 (srcRect 기준 → dstCanvas 좌표계로 환산)
+  function cropCanvasMapped(canvas, refRect, baseRect){
+    const ratio = canvas.width / baseRect.width;
+    const sx = Math.max(0, Math.round(((refRect.left - baseRect.left) + cropRect.x * refRect.width)  * ratio));
+    const sy = Math.max(0, Math.round(((refRect.top  - baseRect.top)  + cropRect.y * refRect.height) * ratio));
+    const sw = Math.min(canvas.width  - sx, Math.round(cropRect.w * refRect.width  * ratio));
+    const sh = Math.min(canvas.height - sy, Math.round(cropRect.h * refRect.height * ratio));
+    if (sw <= 0 || sh <= 0) return canvas;
+    const out = document.createElement('canvas');
+    out.width = sw; out.height = sh;
+    out.getContext('2d').drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+    return out;
+  }
+
+  function cropCanvasByFraction(canvas){
+    const sx = Math.round(cropRect.x * canvas.width);
+    const sy = Math.round(cropRect.y * canvas.height);
+    const sw = Math.round(cropRect.w * canvas.width);
+    const sh = Math.round(cropRect.h * canvas.height);
+    if (sw <= 0 || sh <= 0) return canvas;
+    const out = document.createElement('canvas');
+    out.width = sw; out.height = sh;
+    out.getContext('2d').drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+    return out;
+  }
+
+  function padCanvas(c, pad, transparent){
+    if (!pad && !transparent) return c;
+    const out = document.createElement('canvas');
+    out.width = c.width + pad*2;
+    out.height = c.height + pad*2;
+    const ctx = out.getContext('2d');
+    if (!transparent){ ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,out.width,out.height); }
+    ctx.drawImage(c, pad, pad);
+    return out;
+  }
+
+  // ---------- 내보내기 ----------
+  function renderCanvas(){
+    const scale = parseInt(document.getElementById('scaleSel').value,10);
+    const transparent = document.getElementById('bgSel').value === 'transparent';
+    const pad = parseInt(document.getElementById('padInput').value,10) || 0;
+    if (pdfMode && pdfDoc){
+      return buildPdfCanvas(scale)
+        .then(c => cropRect ? cropCanvasByFraction(c) : c)
+        .then(c => padCanvas(c, pad * scale, transparent));
+    }
+    // 크롭 좌표는 캡쳐 직전에 읽어둠 (html2canvas 도중 레이아웃 참조 방지)
+    const refRect  = cropRect ? cropRefEl().getBoundingClientRect() : null;
+    const baseRect = cropRect ? capture.getBoundingClientRect() : null;
+    if (cropBox) cropBox.style.display = 'none';   // 선택 박스가 결과물에 찍히지 않게
+    return document.fonts.ready.then(() => html2canvas(capture, {
+      scale: scale,
+      backgroundColor: transparent ? null : '#ffffff',
+      useCORS: true,
+      logging: false
+    })).then(canvas => {
+      if (cropBox) cropBox.style.display = '';
+      if (!cropRect) return canvas;
+      const cropped = cropCanvasMapped(canvas, refRect, baseRect);
+      return padCanvas(cropped, Math.round(pad * canvas.width / baseRect.width), transparent);
+    }).catch(err => {
+      if (cropBox) cropBox.style.display = '';
+      throw err;
+    });
+  }
+
+  document.getElementById('saveBtn').addEventListener('click', function(){
+    const btn = this;
+    btn.disabled = true;
+    renderCanvas().then(canvas => {
+      canvas.toBlob(blob => {
+        const a = document.createElement('a');
+        const now = new Date();
+        const pad = n => String(n).padStart(2,'0');
+        a.download = '시트캡쳐_' + now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate()) + '_' + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds()) + '.png';
+        a.href = URL.createObjectURL(blob);
+        a.click();
+        setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
+        showToast('PNG로 저장했어요 (' + canvas.width + '×' + canvas.height + ')');
+        btn.disabled = false;
+      }, 'image/png');
+    }).catch(err => {
+      showToast('저장 중 오류: ' + err.message);
+      btn.disabled = false;
+    });
+  });
+
+  document.getElementById('copyBtn').addEventListener('click', function(){
+    const btn = this;
+    if (!navigator.clipboard || !window.ClipboardItem){
+      showToast('이 브라우저는 이미지 복사를 지원하지 않아요. PNG 저장을 이용해 주세요.');
+      return;
+    }
+    btn.disabled = true;
+    renderCanvas().then(canvas => {
+      canvas.toBlob(blob => {
+        navigator.clipboard.write([new ClipboardItem({'image/png': blob})])
+          .then(()=> showToast('클립보드에 이미지를 복사했어요'))
+          .catch(err => showToast('복사 실패: ' + err.message))
+          .finally(()=> btn.disabled = false);
+      }, 'image/png');
+    }).catch(err => {
+      showToast('렌더링 오류: ' + err.message);
+      btn.disabled = false;
+    });
+  });
+
+  pasteZone.addEventListener('click', ()=> pasteZone.focus());
+
+  // contenteditable이지만 타이핑은 막고 붙여넣기만 허용
+  // (클립보드 데이터가 paste 이벤트에 없을 때는 실제 삽입 후 harvestPasteZone이 수확)
+  pasteZone.addEventListener('beforeinput', function(e){
+    if (e.inputType && e.inputType.indexOf('insertFromPaste') === 0) return;
+    e.preventDefault();
+  });
+
+  // ---------- 모바일용: 클립보드 API로 직접 읽기 ----------
+  document.getElementById('clipboardBtn').addEventListener('click', async function(){
+    if (!navigator.clipboard){
+      showToast('이 브라우저는 클립보드 읽기를 지원하지 않아요. 위 칸을 길게 눌러 붙여넣기 해주세요.');
+      return;
+    }
+    // 1차: 서식 포함 읽기 시도
+    if (navigator.clipboard.read){
+      try{
+        const items = await navigator.clipboard.read();
+        for (const item of items){
+          if (item.types.includes('text/html')){
+            const html = await (await item.getType('text/html')).text();
+            renderFromHtml(html);
+            afterRender();
+            return;
+          }
+        }
+        for (const item of items){
+          if (item.types.includes('text/plain')){
+            const text = await (await item.getType('text/plain')).text();
+            if (text.trim()){ renderFromTsv(text); afterRender(); return; }
+          }
+        }
+      }catch(err){ /* 아래 readText 폴백으로 진행 */ }
+    }
+    // 2차: 텍스트만이라도 읽기 시도
+    if (navigator.clipboard.readText){
+      try{
+        const text = await navigator.clipboard.readText();
+        if (text && text.trim()){
+          renderFromTsv(text);
+          afterRender();
+          showToast('서식 없이 텍스트만 가져왔어요');
+          return;
+        }
+      }catch(err){ /* 최종 안내로 진행 */ }
+    }
+    showToast('클립보드 접근이 차단됐어요. 위 칸을 길게 눌러 붙여넣기 해주세요.');
+  });
+})();
+</script>
 </body>
 </html>
