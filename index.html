@@ -189,10 +189,36 @@
   .seam-preview{display:block;width:100%;max-height:220px;object-fit:contain;border:1px solid var(--grid);}
   .seam-status{font-size:12px;color:var(--sub);}
   @media(max-width:600px){body{padding:18px 10px 50px;}.import-grid{grid-template-columns:1fr;}#optionBar{gap:10px;padding:12px;}#pasteZone{padding:22px 12px;}#toast{white-space:normal;width:max-content;max-width:92vw;}}
+  [hidden]{display:none!important;}
+  .editor-heading{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:24px;}
+  .editor-heading h1{font-size:23px;}
+  .tool-panel,#optionBar,#seamPanel{background:#fff;border:1px solid var(--grid);border-radius:12px;padding:22px;margin-top:18px;}
+  h2{font-size:16px;margin-bottom:12px;}
+  #optionBar>h2{flex-basis:100%;}
+  #optionBar>label{flex-direction:column;align-items:flex-start;gap:8px;min-width:100px;}
+  #optionBar select,#optionBar input{min-height:38px;}
+  #pdfPageWrap{margin:18px 0;gap:12px;align-items:center;}
+  #pdfChips{margin-top:14px;gap:10px;}
+  #pdfChips .chip-actions{width:100%;padding-bottom:12px;border-bottom:1px solid var(--grid);}
+  .chip{width:42px;height:38px;}
+  #seamPanel>strong{display:block;font-size:16px;margin-bottom:10px;}
+  #seamPanel>.seam-controls{justify-content:space-between;padding:14px 0;gap:16px;}
+  .seam-row{background:var(--paper);border:1px solid var(--grid);border-radius:10px;padding:18px;margin-top:16px;}
+  .seam-row>.seam-controls{display:grid;grid-template-columns:minmax(100px,1fr) 78px auto;gap:12px;padding:14px 0;}
+  .seam-row input[type=range]{width:100%;min-width:0;}
+  .seam-row input[type=number]{width:78px;min-height:40px;}
+  .seam-row .seam-controls button{grid-column:1/-1;justify-self:end;font-size:12px;}
+  .seam-status{margin-top:8px;line-height:1.6;}
+  #exportActions{display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap;}
+  #captureFrame{max-height:65vh;scroll-behavior:smooth;overscroll-behavior:contain;}
+  #captureFrame.fit-view #capture{width:100%;}
+  .preview-label{padding:12px 0;gap:12px;}
+  @media(max-width:600px){.tool-panel,#optionBar,#seamPanel{padding:16px;}.seam-row{padding:12px;}.editor-heading .hint{width:100%;}#exportActions button{flex:1;}#seamPanel>.seam-controls{align-items:flex-start;flex-direction:column;}}
 </style>
 </head>
 <body>
 <div class="wrap">
+  <section id="homeScreen">
   <header>
     <div class="cellref">A1</div>
     <h1>시트캡쳐 <em>—</em> 붙여넣으면 이미지가 됩니다</h1>
@@ -224,8 +250,14 @@
       <li>간단한 표는 셀 범위를 복사해 왼쪽 칸에 바로 붙여넣어도 돼요.</li>
     </ol>
   </details>
+  </section>
+
+  <main id="editorScreen" hidden>
+    <div class="editor-heading"><button id="homeBtn" class="btn-ghost">← 메인으로</button><h1>시트 편집</h1><span class="hint">페이지 선택 → 경계 조절 → 저장</span></div>
+    <section id="pagePanel" class="tool-panel" hidden><h2>01 · 페이지 선택</h2><p class="hint">연결할 페이지를 고르세요. 선택한 순서대로 연결돼요.</p></section>
 
   <div id="optionBar">
+    <h2>저장 설정</h2>
     <label>해상도
       <select id="scaleSel">
         <option value="2">2배</option>
@@ -246,7 +278,7 @@
     <label>셀 이미지 높이(px)
       <input type="number" id="imgHeight" value="60" min="20" max="400">
     </label>
-    <label id="pdfPageWrap" style="display:none">PDF
+    <label id="pdfPageWrap" style="display:none">연결 방향
       <select id="pdfDirSel">
         <option value="h">가로로 잇기</option>
         <option value="v">세로로 잇기</option>
@@ -282,11 +314,13 @@
         <div id="sheet"></div>
       </div>
     </div>
-    <div class="hint">
+    <div class="hint" id="cellHint">
       <b>셀에 이미지 넣기:</b> 미리보기에서 셀을 클릭하면 이미지 파일을 골라 그 셀에 넣을 수 있어요. (복사할 때 이미지가 딸려오지 않는 문제를 이걸로 해결)<br>
       넣은 이미지를 클릭하면 삭제됩니다. 다시 붙여넣으면 표 전체가 새로 교체돼요.
     </div>
   </div>
+  <section id="exportPanel" class="tool-panel"><h2>저장하기</h2><div id="exportActions"></div></section>
+  </main>
 </div>
 
 <input type="file" id="imgPicker" accept="image/*" style="display:none">
@@ -303,6 +337,22 @@
   const imgPicker = document.getElementById('imgPicker');
   const toast = document.getElementById('toast');
   let targetCell = null;
+  const pagePanel=document.getElementById('pagePanel');
+  pagePanel.append(document.getElementById('pdfPageWrap'),document.getElementById('pdfChips'));
+  document.getElementById('exportActions').append(document.getElementById('copyBtn'),document.getElementById('saveBtn'));
+  document.querySelector('.preview-label').prepend(document.getElementById('cropBtn'));
+  document.getElementById('exportPanel').prepend(optionBar);
+  function showEditor(){
+    document.getElementById('homeScreen').hidden=true;
+    document.getElementById('editorScreen').hidden=false;
+    window.scrollTo({top:0,behavior:'auto'});
+  }
+  document.getElementById('homeBtn').addEventListener('click',()=>{
+    pdfRevision++;clearTimeout(pdfPreviewTimer);
+    document.getElementById('editorScreen').hidden=true;
+    document.getElementById('homeScreen').hidden=false;
+    window.scrollTo({top:0,behavior:'auto'});
+  });
 
   function showToast(msg){
     toast.textContent = msg;
@@ -471,6 +521,11 @@
   }
 
   function afterRender(){
+    showEditor();
+    pagePanel.hidden=true;
+    document.getElementById('imgHeight').parentElement.hidden=false;
+    document.getElementById('cellHint').hidden=false;
+    document.getElementById('captureFrame').classList.remove('fit-view');
     pdfMode = false;
     pdfRevision++;
     clearTimeout(pdfPreviewTimer);
@@ -566,6 +621,9 @@
       buildPageChips();
       afterRender();
       pdfMode = true;  // afterRender가 false로 초기화하므로 반드시 그 뒤에 설정
+      pagePanel.hidden=false;
+      document.getElementById('imgHeight').parentElement.hidden=true;
+      document.getElementById('cellHint').hidden=true;
       document.getElementById('seamPanel').style.display = multiPageJoin() ? 'block' : 'none';
       const multi = pdfDoc.numPages > 1;
       pdfPageWrap.style.display = multi ? 'flex' : 'none';
@@ -705,6 +763,7 @@
   });
 
   function updatePreviewMode(){
+    document.getElementById('captureFrame').classList.toggle('fit-view',previewFit);
     const preview=sheet.querySelector('.pdf-preview');
     if(preview)preview.classList.toggle('fit',previewFit);
     const button=document.getElementById('previewModeBtn');
@@ -744,6 +803,7 @@
         options.top=Math.max(0,padY+position-frame.clientHeight/2);
       }
       frame.scrollTo(options);
+      frame.scrollIntoView({behavior:'smooth',block:'center'});
       showToast((index+1)+'/'+joins.length+' 경계로 이동했어요');
     });
   });
