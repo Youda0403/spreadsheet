@@ -63,7 +63,8 @@
   #mobilePasteRow .row-note{font-size:12px; color:var(--sub); margin-top:8px; line-height:1.6;}
   #mobilePasteRow .row-note b{color:var(--select);}
   #mobilePasteRow button{margin:0 4px 4px;}
-  #sheet img.pdf-preview{display:block; max-width:100%; height:auto;}
+  #sheet .pdf-preview{display:block; max-width:none; height:auto;}
+  #sheet .pdf-preview.fit{width:100%; max-width:100%;}
   #pasteZone::after{
     content:'';
     position:absolute; right:-7px; bottom:-7px;
@@ -108,9 +109,13 @@
   .preview-label{
     font-family:'IBM Plex Mono', monospace; font-size:12px;
     color:var(--sub); margin-bottom:8px;
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
   }
+  .preview-label .spacer{min-width:8px;}
+  .btn-mini{font-size:12px; padding:5px 9px;}
   #captureFrame{
-    display:inline-block;
+    display:block;
+    width:100%;
     max-width:100%;
     overflow:auto;
     border:1px dashed var(--grid);
@@ -229,7 +234,12 @@
     <div id="seamRows"></div>
   </section>
   <div id="previewSection">
-    <div class="preview-label">PREVIEW — 점선 안쪽이 저장 범위</div>
+    <div class="preview-label">
+      <span>PREVIEW — 점선 안쪽이 저장 범위</span>
+      <span class="spacer"></span>
+      <span id="previewScaleNote"></span>
+      <button class="btn-ghost btn-mini" id="previewModeBtn" type="button" style="display:none">화면에 맞추기</button>
+    </div>
     <div id="captureFrame">
       <div id="capture">
         <div id="sheet"></div>
@@ -265,7 +275,9 @@
   }
 
   function applyPadding(){
-    capture.style.padding = (parseInt(document.getElementById('padInput').value,10) || 0) + 'px';
+    const pad = parseInt(document.getElementById('padInput').value,10) || 0;
+    const multiplier = pdfMode && pdfDoc ? (parseInt(document.getElementById('scaleSel').value,10) || 1) : 1;
+    capture.style.padding = (pad * multiplier) + 'px';
   }
   document.getElementById('padInput').addEventListener('input', applyPadding);
 
@@ -425,7 +437,10 @@
     pdfMode = false;
     pdfRevision++;
     clearTimeout(pdfPreviewTimer);
+    invalidatePdfCanvas();
     document.getElementById('seamPanel').style.display = 'none';
+    document.getElementById('previewModeBtn').style.display = 'none';
+    document.getElementById('previewScaleNote').textContent = '';
     pdfPageWrap.style.display = 'none';
     pdfChips.style.display = 'none';
     clearCrop();
@@ -474,6 +489,10 @@
   const pdfCache = new Map();
   const seamSettings = new Map();
   let pdfRevision = 0;
+  let pdfDocumentRevision = 0;
+  let latestPdfCanvas = null;
+  let latestPdfSignature = '';
+  let previewFit = false;
   const pdfPageWrap = document.getElementById('pdfPageWrap');
   const pdfDirSel = document.getElementById('pdfDirSel');
   const pdfChips = document.getElementById('pdfChips');
@@ -495,20 +514,26 @@
       showToast('PDF를 여는 중...');
       const buf = await file.arrayBuffer();
       pdfDoc = await pdfjsLib.getDocument({data: buf}).promise;
+      pdfDocumentRevision++;
       pdfCache.clear();
       seamSettings.clear();
+      latestPdfCanvas = null;
+      latestPdfSignature = '';
+      previewFit = false;
       // 페이지 칩 구성: 기본은 전체 선택 + 가로 잇기
       selectedPages = [];
       for (let p = 1; p <= pdfDoc.numPages; p++) selectedPages.push(p);
       pdfDirSel.value = 'v';
       buildPageChips();
-      await refreshPdfPreview();
       afterRender();
       pdfMode = true;  // afterRender가 false로 초기화하므로 반드시 그 뒤에 설정
       document.getElementById('seamPanel').style.display = multiPageJoin() ? 'block' : 'none';
       const multi = pdfDoc.numPages > 1;
       pdfPageWrap.style.display = multi ? 'flex' : 'none';
       pdfChips.style.display = multi ? 'flex' : 'none';
+      document.getElementById('previewModeBtn').style.display = 'inline-block';
+      applyPadding();
+      await refreshPdfPreview();
       showToast(multi
         ? pdfDoc.numPages + '페이지 PDF — 붙일 페이지를 번호로 골라보세요'
         : 'PDF를 불러왔어요');
@@ -565,7 +590,21 @@
   });
 
   let pdfPreviewTimer = null;
+  function pdfStateSignature(scale){
+    return JSON.stringify({
+      document:pdfDocumentRevision, scale, pages:selectedPages, direction:pdfDirSel.value,
+      automatic:document.getElementById('seamAuto').checked,
+      seams:[...seamSettings.entries()].sort((a,b)=>a[0].localeCompare(b[0]))
+    });
+  }
+
+  function invalidatePdfCanvas(){
+    latestPdfCanvas = null;
+    latestPdfSignature = '';
+  }
+
   function schedulePdfPreview(){
+    invalidatePdfCanvas();
     pdfRevision++;
     clearTimeout(pdfPreviewTimer);
     pdfPreviewTimer = setTimeout(async () => {
@@ -578,19 +617,41 @@
 
   async function refreshPdfPreview(){
     const revision = ++pdfRevision;
-    const c = await buildPdfCanvas(1.5, true, revision);
+    const scale = parseInt(document.getElementById('scaleSel').value,10) || 1;
+    const signature = pdfStateSignature(scale);
+    const c = await buildPdfCanvas(scale, true, revision);
     if(revision !== pdfRevision) return;
+    latestPdfCanvas = c;
+    latestPdfSignature = signature;
     sheet.innerHTML = '';
-    const img = document.createElement('img');
-    img.className = 'pdf-preview';
-    img.src = c.toDataURL('image/png');
-    sheet.appendChild(img);
+    c.className = 'pdf-preview' + (previewFit ? ' fit' : '');
+    sheet.appendChild(c);
+    updatePreviewMode();
   }
 
   // 선택된 페이지들을 트림 후 이어붙인 캔버스 생성 (사이 여백 0)
   function multiPageJoin(){return selectedPages.length > 1 && pdfDirSel.value !== 'single';}
   document.getElementById('seamAuto').addEventListener('change', () => {clearCrop();schedulePdfPreview();});
   document.getElementById('seamReset').addEventListener('click', () => {seamSettings.clear();clearCrop();schedulePdfPreview();});
+  document.getElementById('scaleSel').addEventListener('change', () => {
+    applyPadding();
+    if(pdfMode && pdfDoc){clearCrop();schedulePdfPreview();}
+  });
+
+  function updatePreviewMode(){
+    const preview=sheet.querySelector('.pdf-preview');
+    if(preview)preview.classList.toggle('fit',previewFit);
+    const button=document.getElementById('previewModeBtn');
+    const note=document.getElementById('previewScaleNote');
+    button.textContent=previewFit?'실제 픽셀로 보기':'화면에 맞추기';
+    note.textContent=previewFit?'축소 표시 중':'저장본과 같은 픽셀 · 좌우로 밀어 확인';
+  }
+
+  document.getElementById('previewModeBtn').addEventListener('click',()=>{
+    previewFit=!previewFit;
+    clearCrop();
+    updatePreviewMode();
+  });
 
   function checkCanvasSize(w,h){
     if(w < 1 || h < 1 || w > 30000 || h > 30000 || w*h > 24000000)
@@ -652,6 +713,52 @@
     return best.k;
   }
 
+  // PDF 페이지의 클리핑 가장자리에서는 세로/가로 선이 1~3px 옅어질 수 있다.
+  // 경계 양쪽으로 같은 선이 이어질 때만 그 짧은 구간의 색을 복원한다.
+  function repairJoinedSeam(canvas,position,dir){
+    const vertical=dir==='v', ctx=canvas.getContext('2d');
+    const across=vertical?canvas.height:canvas.width;
+    const along=vertical?canvas.width:canvas.height;
+    const seam=Math.round(position), reach=5;
+    if(seam<reach || seam+reach>=across)return canvas;
+    const rx=vertical?0:seam-reach, ry=vertical?seam-reach:0;
+    const rw=vertical?along:reach*2+1, rh=vertical?reach*2+1:along;
+    const image=ctx.getImageData(rx,ry,rw,rh),data=image.data;
+    const index=(p,q)=>vertical?(q*rw+p)*4:(p*rw+q)*4;
+    const average=(p,from,to)=>{
+      const colour=[0,0,0,0];
+      for(let q=from;q<=to;q++){
+        const i=index(p,q);for(let c=0;c<4;c++)colour[c]+=data[i+c];
+      }
+      return colour.map(v=>v/(to-from+1));
+    };
+    const variation=(p,from,to,mean)=>{
+      let worst=0;
+      for(let q=from;q<=to;q++){
+        const i=index(p,q);
+        worst=Math.max(worst,Math.abs(data[i]-mean[0])+Math.abs(data[i+1]-mean[1])+Math.abs(data[i+2]-mean[2]));
+      }
+      return worst;
+    };
+    for(let p=0;p<along;p++){
+      const before=average(p,0,2),after=average(p,8,10);
+      const foreground=Math.max(255-before[0],255-before[1],255-before[2])>18;
+      const sidesDiff=Math.abs(before[0]-after[0])+Math.abs(before[1]-after[1])+Math.abs(before[2]-after[2]);
+      if(!foreground || sidesDiff>30 || variation(p,0,2,before)>35 || variation(p,8,10,after)>35)continue;
+      const target=before.map((v,c)=>(v+after[c])/2);
+      const targetLight=target[0]+target[1]+target[2];
+      for(let q=3;q<=7;q++){
+        const i=index(p,q),currentLight=data[i]+data[i+1]+data[i+2];
+        // 어두운 교차선은 보존하고, 비거나 옅어진 픽셀만 복원한다.
+        if(currentLight>targetLight+6){
+          data[i]=Math.round(target[0]);data[i+1]=Math.round(target[1]);data[i+2]=Math.round(target[2]);data[i+3]=Math.round(target[3]);
+        }
+      }
+    }
+    ctx.putImageData(image,rx,ry);
+    return canvas;
+  }
+
   function drawSeamPreview(canvas,a,b,cut,dir){
     const vertical=dir==='v', band=65;
     const cross=Math.max(vertical?a.width:a.height,vertical?b.width:b.height);
@@ -666,6 +773,7 @@
       ctx.drawImage(a,a.width-w,0,w,a.height,band-w,0,w,a.height);
       ctx.drawImage(b,cut,0,t,b.height,band,0,t,b.height);
     }
+    repairJoinedSeam(canvas,band,dir);
     ctx.strokeStyle='#c2185b';ctx.setLineDash([5,5]);ctx.beginPath();
     ctx.moveTo(vertical?0:band,vertical?band:0);ctx.lineTo(vertical?cross:band,vertical?band:cross);ctx.stroke();
   }
@@ -693,7 +801,7 @@
       function adjust(amount){
         const cut=Math.max(0,Math.min(+slider.max,Math.round(Number(amount)||0)));
         slider.value=number.value=cut;value.textContent=cut+'px 제거';
-        drawSeamPreview(preview,refs[i-1],b,cut,dir);seamSettings.set(key,cut/length);clearCrop();
+        drawSeamPreview(preview,refs[i-1],b,cut,dir);seamSettings.set(key,cut/length);invalidatePdfCanvas();clearCrop();
       }
       slider.addEventListener('input',()=>adjust(slider.value));
       number.addEventListener('input',()=>adjust(number.value));
@@ -722,7 +830,6 @@
       const length=dir==='v'?refs[i].height:refs[i].width,key=dir+':'+pages[i-1]+':'+pages[i];
       cuts.push(Math.max(0,Math.min(length-1,Math.round(settings.has(key)?settings.get(key)*length:(auto?n:0)))));
     }
-    if(preview && revision===pdfRevision)renderSeamControls(refs,pages,dir,cuts,automatic);
     async function renderOne(n){
       if(scale===1.5)return refs[pages.indexOf(n)];
       const page = await doc.getPage(n);
@@ -734,7 +841,10 @@
       await page.render({canvasContext: c.getContext('2d'), viewport: viewport}).promise;
       return trimCanvas(c);
     }
-    if (dir === 'single' || pages.length === 1) return renderOne(pages[0]);
+    if (dir === 'single' || pages.length === 1){
+      if(preview && revision===pdfRevision)renderSeamControls(refs,pages,dir,cuts,automatic);
+      return renderOne(pages[0]);
+    }
     const parts = [];
     let totalPixels=0;
     for (const p of pages){
@@ -744,6 +854,8 @@
     }
     const out = document.createElement('canvas');
     const scaledCuts=parts.map((c,i)=>Math.min((dir==='v'?c.height:c.width)-1,Math.round(cuts[i]*(dir==='v'?c.height/refs[i].height:c.width/refs[i].width))));
+    const scaledAutomatic=parts.map((c,i)=>Math.round(automatic[i]*(dir==='v'?c.height/refs[i].height:c.width/refs[i].width)));
+    if(preview && revision===pdfRevision)renderSeamControls(parts,pages,dir,scaledCuts,scaledAutomatic);
     // Preserve larger pages; never silently clip the cross axis.
     if (dir === 'h'){
       out.width  = parts.reduce((s,c,i)=>s+c.width-scaledCuts[i], 0);
@@ -756,11 +868,14 @@
     const ctx = out.getContext('2d');
     ctx.fillStyle='#fff';ctx.fillRect(0,0,out.width,out.height);
     let off = 0;
+    const joins=[];
     parts.forEach((c,i) => {
       const cut=scaledCuts[i];
+      if(i>0)joins.push(off);
       if (dir === 'h'){ ctx.drawImage(c,cut,0,c.width-cut,c.height,off,0,c.width-cut,c.height); off += c.width-cut; }
       else { ctx.drawImage(c,0,cut,c.width,c.height-cut,0,off,c.width,c.height-cut); off += c.height-cut; }
     });
+    joins.forEach(position=>repairJoinedSeam(out,position,dir));
     return out;
   }
 
@@ -801,8 +916,8 @@
 
   // 크롭 좌표의 기준이 되는 콘텐츠 요소 (PDF면 미리보기 이미지, 아니면 표 영역)
   function cropRefEl(){
-    const pdfImg = sheet.querySelector('img.pdf-preview');
-    return pdfImg || sheet;
+    const pdfPreview = sheet.querySelector('.pdf-preview');
+    return pdfPreview || sheet;
   }
 
   document.getElementById('cropBtn').addEventListener('click', function(){
@@ -911,7 +1026,11 @@
     const transparent = document.getElementById('bgSel').value === 'transparent';
     const pad = parseInt(document.getElementById('padInput').value,10) || 0;
     if (pdfMode && pdfDoc){
-      return buildPdfCanvas(scale)
+      const signature=pdfStateSignature(scale);
+      const base=latestPdfCanvas && latestPdfSignature===signature
+        ? Promise.resolve(latestPdfCanvas)
+        : buildPdfCanvas(scale);
+      return base
         .then(c => cropRect ? cropCanvasByFraction(c) : c)
         .then(c => padCanvas(c, pad * scale, transparent));
     }
