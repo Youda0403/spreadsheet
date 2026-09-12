@@ -190,8 +190,10 @@
   .seam-status{font-size:12px;color:var(--sub);}
   @media(max-width:600px){body{padding:18px 10px 50px;}.import-grid{grid-template-columns:1fr;}#optionBar{gap:10px;padding:12px;}#pasteZone{padding:22px 12px;}#toast{white-space:normal;width:max-content;max-width:92vw;}}
   [hidden]{display:none!important;}
-  .editor-heading{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:24px;}
+  .editor-heading{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:16px;margin-bottom:24px;}
   .editor-heading h1{font-size:23px;}
+  .editor-title{min-width:0;}
+  .editor-steps{margin-top:6px;font-size:12px;line-height:1.6;color:var(--sub);}
   .tool-panel,#optionBar,#seamPanel{background:#fff;border:1px solid var(--grid);border-radius:12px;padding:22px;margin-top:18px;}
   h2{font-size:16px;margin-bottom:12px;}
   #optionBar>h2{flex-basis:100%;}
@@ -210,6 +212,8 @@
   .seam-row .seam-controls button{grid-column:1/-1;justify-self:end;font-size:12px;}
   .seam-status{margin-top:8px;line-height:1.6;}
   #exportActions{display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap;}
+  #exportPanel{padding:0;border:0;background:transparent;}
+  #exportPanel #optionBar{margin-top:0;margin-bottom:20px;}
   #captureFrame{max-height:65vh;scroll-behavior:smooth;overscroll-behavior:contain;}
   #captureFrame.fit-view #capture{width:100%;}
   .preview-label{padding:12px 0;gap:12px;}
@@ -220,7 +224,6 @@
 <div class="wrap">
   <section id="homeScreen">
   <header>
-    <div class="cellref">A1</div>
     <h1>시트캡쳐 <em>—</em> 붙여넣으면 이미지가 됩니다</h1>
     <div class="desc">엑셀·구글 시트의 셀을 붙여넣거나 PDF를 불러오면 고해상도 PNG로 저장할 수 있어요. 폰트·이미지·셀 크기를 정확히 유지하려면 PDF 방식을 추천합니다.</div>
   </header>
@@ -238,7 +241,7 @@
   </div>
   <div id="mobilePasteRow">
     <button class="btn-primary" id="clipboardBtn">📋 클립보드에서 가져오기</button>
-    <div class="row-note">모바일에서 복사가 잘 안 될 때 사용하는 버튼이에요</div>
+    <div class="row-note">모바일에서 붙여넣기가 잘 안 될 때 사용하는 버튼이에요</div>
   </div>
 
   <details class="guide" open>
@@ -247,13 +250,13 @@
       <li><b>정확한 서식이 중요하면</b> 시트 앱에서 PDF로 내보낸 뒤 ‘PDF 파일 불러오기’를 누르세요.</li>
       <li>필요한 페이지와 연결 방향을 고르고, 중복된 경계는 제거 픽셀을 조절해 맞춰 주세요.</li>
       <li>‘경계 부분 보기’로 연결 부위를 확인한 뒤 해상도·배경·여백을 정하고 PNG로 저장하세요.</li>
-      <li>간단한 표는 셀 범위를 복사해 왼쪽 칸에 바로 붙여넣어도 돼요.</li>
+      <li>간단한 표는 셀 범위를 복사해 ‘셀 범위 붙여넣기’ 칸에 바로 붙여넣어도 돼요.</li>
     </ol>
   </details>
   </section>
 
   <main id="editorScreen" hidden>
-    <div class="editor-heading"><button id="homeBtn" class="btn-ghost">← 메인으로</button><h1>시트 편집</h1><span class="hint">페이지 선택 → 경계 조절 → 저장</span></div>
+    <div class="editor-heading"><button id="homeBtn" class="btn-ghost">← 메인으로</button><div class="editor-title"><h1>시트 편집</h1><p class="editor-steps">페이지 선택 → 경계 조절 → 저장</p></div></div>
     <section id="pagePanel" class="tool-panel" hidden><h2>01 · 페이지 선택</h2><p class="hint">연결할 페이지를 고르세요. 선택한 순서대로 연결돼요.</p></section>
 
   <div id="optionBar">
