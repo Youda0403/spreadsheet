@@ -351,6 +351,7 @@
   }
   document.getElementById('homeBtn').addEventListener('click',()=>{
     pdfRevision++;clearTimeout(pdfPreviewTimer);
+    pasteZone.innerHTML = placeholderHTML;
     document.getElementById('editorScreen').hidden=true;
     document.getElementById('homeScreen').hidden=false;
     window.scrollTo({top:0,behavior:'auto'});
