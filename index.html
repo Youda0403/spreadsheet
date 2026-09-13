@@ -459,7 +459,54 @@
       div.innerHTML = doc.body.innerHTML;
       sheet.appendChild(div);
     }
+    restoreCheckboxes(sheet);
     injectFonts(sheet);
+  }
+
+  // 시트의 체크박스 셀은 클립보드 HTML에 TRUE/FALSE 글자로만 실려옴 → 체크박스 모양으로 되살림
+  // data-sheets-value 의 "1":4 는 불리언(체크박스) 타입이고 "4" 가 1이면 체크된 상태
+  function restoreCheckboxes(root){
+    root.querySelectorAll('[data-sheets-value]').forEach(cell => {
+      let v;
+      try{ v = JSON.parse(cell.getAttribute('data-sheets-value')); }
+      catch(err){ return; }
+      if (!v || v['1'] !== 4) return;
+      const cs = getComputedStyle(cell);
+      const size = Math.round((parseFloat(cs.fontSize) || 13) * 1.05);
+      cell.textContent = '';
+      cell.appendChild(checkboxSvg(!!v['4'], size, cs.color || '#3c4043'));
+      cell.style.textAlign = 'center';
+    });
+  }
+
+  function checkboxSvg(checked, size, color){
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('width', size);
+    svg.setAttribute('height', size);
+    svg.setAttribute('viewBox', '0 0 18 18');
+    svg.style.verticalAlign = 'middle';
+    const box = document.createElementNS(NS, 'rect');
+    box.setAttribute('x', '2.2');
+    box.setAttribute('y', '2.2');
+    box.setAttribute('width', '13.6');
+    box.setAttribute('height', '13.6');
+    box.setAttribute('rx', '2');
+    box.setAttribute('fill', checked ? color : 'none');
+    box.setAttribute('stroke', color);
+    box.setAttribute('stroke-width', '1.6');
+    svg.appendChild(box);
+    if (checked){
+      const tick = document.createElementNS(NS, 'path');
+      tick.setAttribute('d', 'M5.4 9.2 L7.9 11.7 L12.7 6.5');
+      tick.setAttribute('fill', 'none');
+      tick.setAttribute('stroke', '#fff');
+      tick.setAttribute('stroke-width', '1.9');
+      tick.setAttribute('stroke-linecap', 'round');
+      tick.setAttribute('stroke-linejoin', 'round');
+      svg.appendChild(tick);
+    }
+    return svg;
   }
 
   // 붙여넣은 서식에 쓰인 폰트를 구글 폰트에서 자동 로드 (없는 폰트면 조용히 무시됨)
