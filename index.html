@@ -460,7 +460,22 @@
       sheet.appendChild(div);
     }
     restoreCheckboxes(sheet);
+    repairFontNames(sheet);
     injectFonts(sheet);
+  }
+
+  // 시트는 'Source Serif 4'처럼 숫자로 끝나는 폰트 이름을 따옴표 없이 보내는데,
+  // 그러면 CSS가 font-family 줄을 통째로 버려서 폰트가 통째로 무시됨 → 따옴표를 씌워 되살림
+  function repairFontNames(root){
+    root.querySelectorAll('[style]').forEach(el => {
+      if (el.style.fontFamily) return;
+      const m = /font-family\s*:\s*([^;]+)/i.exec(el.getAttribute('style'));
+      if (!m) return;
+      el.style.fontFamily = m[1].split(',').map(part => {
+        const name = part.trim().replace(/^['"]|['"]$/g, '');
+        return /^(serif|sans-serif|monospace|cursive|fantasy|system-ui)$/i.test(name) ? name : '"' + name + '"';
+      }).join(', ');
+    });
   }
 
   // 시트의 체크박스 셀은 클립보드 HTML에 TRUE/FALSE 글자로만 실려옴 → 체크박스 모양으로 되살림
