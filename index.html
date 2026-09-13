@@ -398,6 +398,14 @@
       return;
     }
     e.preventDefault();
+    if (!renderFromClipboard(html, text)){
+      showToast('표 형태의 데이터가 아니에요. 셀 범위를 복사해서 붙여넣어 주세요.');
+    }
+  });
+
+  // 원본 클립보드 내용으로 그린다. 브라우저가 붙여넣기 칸에 넣어준 DOM은
+  // 정렬 같은 서식이 지워진 상태라, 원본을 쓸 수 있으면 항상 원본을 쓴다.
+  function renderFromClipboard(html, text){
     if (html && /<table/i.test(html)) {
       renderFromHtml(html);
     } else if (text && text.indexOf('\t') !== -1) {
@@ -405,12 +413,12 @@
     } else if (html) {
       renderFromHtml(html);
     } else {
-      showToast('표 형태의 데이터가 아니에요. 셀 범위를 복사해서 붙여넣어 주세요.');
-      return;
+      return false;
     }
     clipboardRenderAt = Date.now();
     afterRender();
-  });
+    return true;
+  }
 
   let harvestTimer = null;
   let clipboardRenderAt = 0;
@@ -418,6 +426,17 @@
     clearTimeout(harvestTimer);
     harvestTimer = setTimeout(harvestPasteZone, 60);
   }
+
+  // 안드로이드 클립보드 툴바 등은 paste 이벤트 없이 beforeinput만 보내는데,
+  // 여기에도 원본 클립보드가 실려 있으므로 삽입을 막고 원본으로 그린다.
+  pasteZone.addEventListener('beforeinput', function(e){
+    if (e.inputType !== 'insertFromPaste') return;
+    if (Date.now() - clipboardRenderAt < 2000){ e.preventDefault(); return; }
+    if (!e.dataTransfer) return;
+    const html = e.dataTransfer.getData('text/html');
+    const text = e.dataTransfer.getData('text/plain');
+    if ((html || text) && renderFromClipboard(html, text)) e.preventDefault();
+  });
 
   // paste 이벤트 없이 내용이 삽입되는 브라우저 대비 안전망
   pasteZone.addEventListener('input', scheduleHarvest);
