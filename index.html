@@ -408,10 +408,12 @@
       showToast('표 형태의 데이터가 아니에요. 셀 범위를 복사해서 붙여넣어 주세요.');
       return;
     }
+    clipboardRenderAt = Date.now();
     afterRender();
   });
 
   let harvestTimer = null;
+  let clipboardRenderAt = 0;
   function scheduleHarvest(){
     clearTimeout(harvestTimer);
     harvestTimer = setTimeout(harvestPasteZone, 60);
@@ -421,6 +423,12 @@
   pasteZone.addEventListener('input', scheduleHarvest);
 
   function harvestPasteZone(){
+    // 모바일에서는 preventDefault가 안 먹어 붙여넣기 칸에도 내용이 들어온다.
+    // 이미 클립보드 원본으로 그린 뒤이므로, 브라우저가 정제하며 정렬을 지운 DOM으로 덮어쓰지 않는다.
+    if (Date.now() - clipboardRenderAt < 2000){
+      pasteZone.innerHTML = placeholderHTML;
+      return;
+    }
     const clone = pasteZone.cloneNode(true);
     clone.querySelectorAll('.big, .small').forEach(n => n.remove());
     const hasTable = clone.querySelector('table');
