@@ -408,6 +408,7 @@
       // 일부 모바일 브라우저는 paste 이벤트에 클립보드 데이터를 안 실어줌
       // → 막지 않고 브라우저가 pasteZone에 직접 삽입하게 둔 뒤 DOM에서 수확
       if (t === pasteZone || pasteZone.contains(t)) {
+        pasteAttemptAt = Date.now();
         scheduleHarvest();
       }
       return;
@@ -438,6 +439,7 @@
   let harvestTimer = null;
   let harvestTries = 0;
   let clipboardRenderAt = 0;
+  let pasteAttemptAt = 0;   // 원본을 못 받은 붙여넣기가 들어온 시각 (실패 안내를 띄울지 판단용)
   function scheduleHarvest(){
     clearTimeout(harvestTimer);
     harvestTimer = setTimeout(harvestPasteZone, 60);
@@ -448,10 +450,13 @@
   pasteZone.addEventListener('beforeinput', function(e){
     if (e.inputType !== 'insertFromPaste') return;
     if (Date.now() - clipboardRenderAt < 2000){ e.preventDefault(); return; }
-    if (!e.dataTransfer) return;
-    const html = e.dataTransfer.getData('text/html');
-    const text = e.dataTransfer.getData('text/plain');
-    if ((html || text) && renderFromClipboard(html, text)) e.preventDefault();
+    const html = e.dataTransfer ? e.dataTransfer.getData('text/html') : '';
+    const text = e.dataTransfer ? e.dataTransfer.getData('text/plain') : '';
+    if ((html || text) && renderFromClipboard(html, text)){
+      e.preventDefault();
+      return;
+    }
+    pasteAttemptAt = Date.now();   // 원본 없이 칸에 삽입되는 경우 → 아래 안전망이 처리
   });
 
   // paste 이벤트 없이 내용이 삽입되는 브라우저 대비 안전망
@@ -476,8 +481,11 @@
         return;
       }
       harvestTries = 0;
-      pasteZone.innerHTML = placeholderHTML;
-      showToast('붙여넣은 내용을 읽지 못했어요. 시트에서 셀을 다시 복사해 주세요.');
+      // 칸을 눌렀을 때 등 붙여넣기가 아닌 입력에는 아무 말도 하지 않는다
+      if (Date.now() - pasteAttemptAt < 4000){
+        pasteZone.innerHTML = placeholderHTML;
+        showToast('붙여넣은 내용을 읽지 못했어요. 시트에서 셀을 다시 복사해 주세요.');
+      }
       return;
     }
     harvestTries = 0;
