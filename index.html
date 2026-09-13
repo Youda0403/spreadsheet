@@ -546,20 +546,69 @@
     });
   }
 
-  // 시트의 체크박스 셀은 클립보드 HTML에 TRUE/FALSE 글자로만 실려옴 → 체크박스 모양으로 되살림
-  // data-sheets-value 의 "1":4 는 불리언(체크박스) 타입이고 "4" 가 1이면 체크된 상태
+  // 시트의 체크박스 셀은 클립보드에서 TRUE/FALSE 글자로 실려올 수 있음 → 체크박스 모양으로 되살림
+  // 1차: data-sheets-value 의 "1":4 불리언 메타데이터를 사용한다.
+  // 2차: 브라우저가 메타데이터를 지운 경우, TRUE/FALSE가 반복되는 열만 체크박스 열로 추정한다.
   function restoreCheckboxes(root){
+    const restored = new Set();
+
     root.querySelectorAll('[data-sheets-value]').forEach(cell => {
       let v;
       try{ v = JSON.parse(cell.getAttribute('data-sheets-value')); }
       catch(err){ return; }
-      if (!v || v['1'] !== 4) return;
-      const cs = getComputedStyle(cell);
-      const size = Math.round((parseFloat(cs.fontSize) || 13) * 1.05);
-      cell.textContent = '';
-      cell.appendChild(checkboxSvg(!!v['4'], size, cs.color || '#3c4043'));
-      cell.style.textAlign = 'center';
+      if (!v || Number(v['1']) !== 4) return;
+      const raw = v['4'];
+      const checked = raw === true || raw === 1 || String(raw).toLowerCase() === 'true';
+      renderCheckboxCell(cell, checked);
+      restored.add(cell);
     });
+
+    root.querySelectorAll('table').forEach(table => {
+      const columns = [];
+      Array.from(table.rows).forEach(row => {
+        let columnIndex = 0;
+        Array.from(row.cells).forEach(cell => {
+          const span = Math.max(1, parseInt(cell.getAttribute('colspan'), 10) || 1);
+          const bucket = columns[columnIndex] || (columns[columnIndex] = {
+            explicitCount: 0,
+            otherCount: 0,
+            booleanCells: []
+          });
+
+          if (restored.has(cell)){
+            bucket.explicitCount++;
+          } else {
+            const value = cell.textContent.replace(/\u00a0/g, ' ').trim();
+            const normalized = value.toUpperCase();
+            if (normalized === 'TRUE' || normalized === 'FALSE'){
+              bucket.booleanCells.push({ cell, checked: normalized === 'TRUE' });
+            } else if (value){
+              bucket.otherCount++;
+            }
+          }
+          columnIndex += span;
+        });
+      });
+
+      columns.forEach(bucket => {
+        if (!bucket || !bucket.booleanCells.length) return;
+        // 명시적 체크박스가 하나라도 있거나, 한 열에 불리언 값이 3개 이상이고
+        // 비불리언 내용보다 충분히 많을 때만 자동 변환해 일반 TRUE/FALSE 표를 보호한다.
+        const looksLikeCheckboxColumn = bucket.explicitCount > 0 ||
+          (bucket.booleanCells.length >= 3 &&
+           bucket.booleanCells.length >= Math.max(3, bucket.otherCount * 2));
+        if (!looksLikeCheckboxColumn) return;
+        bucket.booleanCells.forEach(item => renderCheckboxCell(item.cell, item.checked));
+      });
+    });
+  }
+
+  function renderCheckboxCell(cell, checked){
+    const cs = getComputedStyle(cell);
+    const size = Math.round((parseFloat(cs.fontSize) || 13) * 1.05);
+    cell.textContent = '';
+    cell.appendChild(checkboxSvg(checked, size, cs.color || '#3c4043'));
+    cell.style.textAlign = 'center';
   }
 
   function checkboxSvg(checked, size, color){
@@ -651,6 +700,7 @@
     });
     sheet.innerHTML = '';
     sheet.appendChild(table);
+    restoreCheckboxes(sheet);
   }
 
   function afterRender(){
