@@ -7,6 +7,20 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+// 브라우저가 캐시해 둔 옛 페이지를 보여줬으면, 캐시를 우회해 한 번만 다시 불러온다
+// (GitHub Pages가 HTML에 캐시 시간을 걸어 보내기 때문에 새로고침만으로는 안 바뀔 수 있음)
+(function(){
+  if (location.protocol !== 'http:' && location.protocol !== 'https:') return;   // 파일로 직접 열었을 때는 확인하지 않음
+  if (location.search.indexOf('v=') !== -1) return;   // 이미 캐시를 우회해 들어온 페이지
+  fetch(location.pathname + '?_=' + Date.now(), {method:'HEAD', cache:'no-store'}).then(function(res){
+    var fresh = res.headers.get('last-modified');
+    if (fresh && new Date(fresh) > new Date(document.lastModified)){
+      location.replace(location.pathname + '?v=' + Date.now());
+    }
+  }).catch(function(){});
+})();
+</script>
 <style>
   :root{
     --ink:#1f2a44;
