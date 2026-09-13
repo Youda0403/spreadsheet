@@ -13,7 +13,12 @@
 (function(){
   if (location.protocol !== 'http:' && location.protocol !== 'https:') return;   // 파일로 직접 열었을 때는 확인하지 않음
   if (location.search.indexOf('v=') !== -1) return;   // 이미 캐시를 우회해 들어온 페이지
-  fetch(location.pathname + '?_=' + Date.now(), {method:'HEAD', cache:'no-store'}).then(function(res){
+  var asked = Date.now();
+  fetch(location.pathname + '?_=' + asked, {method:'HEAD', cache:'no-store'}).then(function(res){
+    // 응답이 늦게 왔거나 이미 작업을 시작했으면 건드리지 않는다 (작업 중 새로고침 방지)
+    if (Date.now() - asked > 3000) return;
+    var editor = document.getElementById('editorScreen');
+    if (!editor || !editor.hidden) return;
     var fresh = res.headers.get('last-modified');
     if (fresh && new Date(fresh) > new Date(document.lastModified)){
       location.replace(location.pathname + '?v=' + Date.now());
@@ -441,8 +446,9 @@
   let clipboardRenderAt = 0;
   let pasteAttemptAt = 0;   // 원본을 못 받은 붙여넣기가 들어온 시각 (실패 안내를 띄울지 판단용)
   function scheduleHarvest(){
+    // 큰 표는 칸에 나눠서 들어온다 → 입력이 멎을 때까지 기다렸다 읽어야 반쪽짜리 표를 그리지 않는다
     clearTimeout(harvestTimer);
-    harvestTimer = setTimeout(harvestPasteZone, 60);
+    harvestTimer = setTimeout(harvestPasteZone, 400);
   }
 
   // 안드로이드 클립보드 툴바 등은 paste 이벤트 없이 beforeinput만 보내는데,
@@ -489,6 +495,7 @@
       return;
     }
     harvestTries = 0;
+    pasteAttemptAt = 0;   // 이 붙여넣기는 처리됐다 → 뒤늦게 들어오는 입력에 실패 안내를 띄우지 않는다
     pasteZone.innerHTML = placeholderHTML;
     if (hasTable){
       renderFromHtml(clone.innerHTML);
