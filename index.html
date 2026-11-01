@@ -1221,7 +1221,9 @@
     const w = c.width, h = c.height;
     const d = ctx.getImageData(0, 0, w, h).data;
     const bg = [d[0], d[1], d[2]];
-    const tol = 12;
+    // 종이 여백(흰색)만 잘라낸다. 허용치가 크면 시트 자체의 옅은 배경색
+    // (예: #FAFAFA)까지 여백으로 보고 제목 위·좌우 공간을 함께 잘라버린다.
+    const tol = 2;
     const isBg = i => Math.abs(d[i]-bg[0])<=tol && Math.abs(d[i+1]-bg[1])<=tol && Math.abs(d[i+2]-bg[2])<=tol;
     const rowHasContent = y => {
       const base = y*w*4;
